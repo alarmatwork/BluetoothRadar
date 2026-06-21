@@ -252,7 +252,8 @@ Register the card's JS file **once** — this single resource provides *both* th
    # size: 600             # max scope width in px (default: fills the column)
    # max_distance: 100     # outer ring in km (defaults to integration range)
    # sweep_seconds: 4
-   # show_labels: true     # callsign + altitude + distance
+   # show_labels: true     # callsign + route + altitude + distance
+   # route_label: codes    # on-scope route: codes (LHR→JFK) | cities | off
    # name_filter: "RYR"    # e.g. only Ryanair callsigns
    ```
 

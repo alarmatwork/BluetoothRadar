@@ -68,6 +68,9 @@ class RadarCard extends HTMLElement {
     this._size = Number(this._config.size) || null; // px; caps + centres the scope
     this._sweepSeconds = Number(this._config.sweep_seconds) || 4;
     this._showLabels = this._config.show_labels !== false;
+    // On-scope route label style: "codes" (LHR→JFK), "cities" (London→New York)
+    // or "off". Full airport names always appear in the click panel.
+    this._routeLabel = this._config.route_label || "codes";
     this._nameFilter = (this._config.name_filter || "").toLowerCase();
     this._unit = DEFAULT_UNIT[this._mode];
     // Resubscribe if the mode changed at runtime.
@@ -389,8 +392,11 @@ class RadarCard extends HTMLElement {
   _subLabels(dev, unit) {
     if (this._mode === "flights") {
       const lines = [];
-      if (dev.departure && dev.arrival)
-        lines.push(`${dev.departure}→${dev.arrival}`);
+      if (this._routeLabel !== "off" && dev.departure && dev.arrival) {
+        if (this._routeLabel === "cities" && dev.departure_city && dev.arrival_city)
+          lines.push(`${dev.departure_city}→${dev.arrival_city}`);
+        else lines.push(`${dev.departure}→${dev.arrival}`);
+      }
       const parts = [];
       if (dev.altitude != null) parts.push(`${dev.altitude}ft`);
       if (dev.distance != null) parts.push(`${dev.distance}${unit}`);
@@ -537,6 +543,8 @@ class RadarCard extends HTMLElement {
       const cs = (dev.name || "").trim();
       extra = `
         <div class="k">Route</div><div class="v" id="route">…</div>
+        <div class="k" id="from-k" hidden>From</div><div class="v" id="from" hidden></div>
+        <div class="k" id="to-k" hidden>To</div><div class="v" id="to" hidden></div>
         <div class="k" id="reg-k" hidden>Reg.</div><div class="v" id="reg" hidden></div>
         <div class="k" id="type-k" hidden>Aircraft</div><div class="v" id="type" hidden></div>
         <div class="k" id="op-k" hidden>Operator</div><div class="v" id="op" hidden></div>
@@ -566,6 +574,8 @@ class RadarCard extends HTMLElement {
       if (this._selected !== dev.address || !this._detailsEl) return;
       const routeEl = this._detailsEl.querySelector("#route");
       if (routeEl) routeEl.textContent = this._routeText(r);
+      this._fillRow("from", r.departure_name);
+      this._fillRow("to", r.arrival_name);
       this._fillRow("reg", r.registration);
       const type = [r.aircraft_manufacturer, r.aircraft_type]
         .filter(Boolean)

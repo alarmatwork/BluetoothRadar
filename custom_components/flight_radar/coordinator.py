@@ -58,6 +58,14 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * _EARTH_RADIUS_KM * math.asin(math.sqrt(a))
 
 
+def _apply_label_route(blip: dict[str, Any], route: dict[str, Any]) -> None:
+    """Copy the label-relevant route fields (codes + cities) onto a blip."""
+    blip["departure"] = route.get("departure")
+    blip["arrival"] = route.get("arrival")
+    blip["departure_city"] = route.get("departure_city")
+    blip["arrival_city"] = route.get("arrival_city")
+
+
 def _bearing_deg(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Initial bearing from point 1 to point 2 (0 = north, clockwise)."""
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
@@ -169,8 +177,7 @@ class FlightRadarCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
                 continue
             cached = self._label_route_cache.get(callsign)
             if cached and (now - cached[0]) < ROUTE_CACHE_TTL:
-                blip["departure"] = cached[1].get("departure")
-                blip["arrival"] = cached[1].get("arrival")
+                _apply_label_route(blip, cached[1])
             else:
                 pending.append((blip, callsign))
 
@@ -184,8 +191,7 @@ class FlightRadarCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
         for (blip, callsign), result in zip(batch, results):
             route = {} if isinstance(result, BaseException) else (result or {})
             self._label_route_cache[callsign] = (time.time(), route)
-            blip["departure"] = route.get("departure")
-            blip["arrival"] = route.get("arrival")
+            _apply_label_route(blip, route)
 
     async def async_get_route(
         self, callsign: str, icao24: str | None = None
