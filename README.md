@@ -147,8 +147,8 @@ cp    bluetooth-radar-src/www/bluetooth-radar-card.js       /config/www/
 
 **Updating later:** `cd /config/bluetooth-radar-src && git pull`, then restart HA
 (for integration changes) or hard-refresh the browser (for card-only changes).
-Or run the bundled [`update.sh`](update.sh) (pulls, re-links the integrations,
-re-copies the card; `./update.sh --restart` also restarts HA).
+Or run the bundled [`update.sh`](update.sh) (pulls, then copies the integrations
+and card into HA; `./update.sh --restart` also restarts HA).
 
 #### Method B — Manual copy / rsync
 

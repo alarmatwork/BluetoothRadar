@@ -3,9 +3,9 @@
 # update.sh — pull the latest Radar code and deploy it into Home Assistant.
 #
 # Deployment model (see README → Installation):
-#   * integrations are SYMLINKED  -> auto-update on git pull, just restart HA
-#   * the card is COPIED          -> HA's web server won't follow www symlinks,
-#                                    so we re-copy the single file each time
+#   * everything is COPIED out of the clone into HA's config. Symlinks are
+#     unreliable here (HA's web server won't serve www symlinks, and the
+#     integration symlinks proved flaky), so we copy real files every run.
 #
 # Usage:
 #   ./update.sh             pull + deploy (then restart HA yourself)
@@ -49,11 +49,13 @@ fi
 
 mkdir -p "$CC" "$WWW"
 
-# --- (re)link the integrations (idempotent) ---
-# ln -sfn safely replaces an existing symlink (or a stale copy) without nesting.
-echo "==> linking integrations"
-ln -sfn "$SRC/custom_components/bluetooth_radar" "$CC/bluetooth_radar"
-ln -sfn "$SRC/custom_components/flight_radar"    "$CC/flight_radar"
+# --- copy the integrations ---
+# rm -rf first removes any previous copy *or* stale symlink so we never nest
+# (rm -rf on a symlink removes only the link, not its target).
+echo "==> copying integrations"
+rm -rf "$CC/bluetooth_radar" "$CC/flight_radar"
+cp -r "$SRC/custom_components/bluetooth_radar" "$CC/bluetooth_radar"
+cp -r "$SRC/custom_components/flight_radar"    "$CC/flight_radar"
 
 # --- copy the card (symlinks aren't served from www) ---
 # Remove the destination first: if it's an old symlink, plain cp would error
