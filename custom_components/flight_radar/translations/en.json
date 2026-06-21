@@ -1,0 +1,46 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Flight Radar",
+        "description": "Plots aircraft around a chosen location on a retro radar screen. Distance and bearing are real (from each aircraft's GPS position). Defaults to your Home Assistant location.",
+        "data": {
+          "latitude": "Centre latitude",
+          "longitude": "Centre longitude",
+          "radius": "Radar range (km)",
+          "update_interval": "Update interval (seconds)",
+          "source": "Data source",
+          "opensky_client_id": "OpenSky client ID (optional)",
+          "opensky_client_secret": "OpenSky client secret (optional)",
+          "local_url": "Local ADS-B aircraft.json URL (local source only)"
+        }
+      }
+    },
+    "error": {
+      "local_url_required": "A local ADS-B aircraft.json URL is required when using the local source."
+    },
+    "abort": {
+      "already_configured": "Flight Radar is already set up."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Flight Radar options",
+        "data": {
+          "latitude": "Centre latitude",
+          "longitude": "Centre longitude",
+          "radius": "Radar range (km)",
+          "update_interval": "Update interval (seconds)",
+          "source": "Data source",
+          "opensky_client_id": "OpenSky client ID (optional)",
+          "opensky_client_secret": "OpenSky client secret (optional)",
+          "local_url": "Local ADS-B aircraft.json URL (local source only)"
+        }
+      }
+    },
+    "error": {
+      "local_url_required": "A local ADS-B aircraft.json URL is required when using the local source."
+    }
+  }
+}

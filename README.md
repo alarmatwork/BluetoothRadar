@@ -253,6 +253,56 @@ HACS add it as a **custom repository**. Notes:
 For a private, actively-developed project, SSH/rsync is the lower-friction
 choice; reach for HACS when you want it to update itself.
 
+## Flight Radar (same scope, real bearings)
+
+The same card can also plot **aircraft around a location** — and unlike the
+Bluetooth radar, this one is *honest in both axes*: aircraft broadcast their GPS
+position, so **distance and bearing are both real**. North is up, blips are
+little triangles pointing along each aircraft's track.
+
+It's a second integration (`flight_radar`) that shares the same card file, so
+you can run **both radars at once**.
+
+### Data sources
+
+| Source | Hardware | Notes |
+|--------|----------|-------|
+| **OpenSky Network** (default) | none | Free cloud API. Works anonymously but is heavily rate-limited; add free **OpenSky OAuth2 client credentials** (client ID + secret) for usable limits. Keep the update interval ≥ ~10 s. |
+| **Local ADS-B receiver** | RTL-SDR | Point it at your `aircraft.json` (dump1090 / tar1090 / readsb / PiAware), e.g. `http://<host>/tar1090/data/aircraft.json`. No rate limits, fully local, fastest. |
+
+### Setup
+
+1. The files are already installed (same repo, `custom_components/flight_radar/`
+   ships alongside `bluetooth_radar/`). After the usual restart, add
+   **Settings → Devices & Services → Add Integration → Flight Radar**.
+2. Configure:
+
+   | Option | Default | Meaning |
+   |--------|---------|---------|
+   | Centre latitude / longitude | your HA **Home** location | Where the radar is centred. Change to watch any spot. |
+   | Radar range | `100` km | Outer ring distance. |
+   | Update interval | `15` s | Poll cadence. Lower only with a local receiver. |
+   | Data source | OpenSky | `OpenSky Network` or `Local ADS-B receiver`. |
+   | OpenSky client ID / secret | empty | Optional; strongly recommended for OpenSky. |
+   | Local ADS-B URL | empty | Required if source = local. |
+
+3. Add the card (the card resource is already registered from the Bluetooth
+   setup — no extra resource needed):
+
+   ```yaml
+   type: custom:flight-radar-card
+   title: Flight Radar
+   # optional:
+   # max_distance: 100     # outer ring in km (defaults to integration range)
+   # sweep_seconds: 4
+   # show_labels: true
+   # name_filter: "RYR"    # e.g. only Ryanair callsigns
+   ```
+
+> The `bluetooth-radar-card` and `flight-radar-card` are the **same code** with
+> different defaults. You can also write `type: custom:bluetooth-radar-card`
+> with `mode: flights` (or vice-versa) — the `mode:` option wins.
+
 ## Tuning tips
 
 - Devices appearing too close/too far? Adjust **measured power** first, then
@@ -264,11 +314,19 @@ choice; reach for HACS when you want it to update itself.
 ## Data flow
 
 ```
-ESP32 bluetooth_proxy ─BLE adv─▶ HA Bluetooth integration
+Bluetooth:
+  ESP32 bluetooth_proxy ─BLE adv─▶ HA Bluetooth integration
         └▶ bluetooth_radar (async_register_callback)
-              └▶ snapshot every 1s ─WebSocket(bluetooth_radar/subscribe)─▶ card
-                    └▶ canvas radar: sweep + blips
+              └▶ snapshot 1s ─WS(bluetooth_radar/subscribe)─▶ card
+
+Flights:
+  OpenSky API / local aircraft.json ─poll─▶ flight_radar coordinator
+        └▶ distance + bearing from centre
+              └▶ snapshot ─WS(flight_radar/subscribe)─▶ card
 ```
+
+Both push the **same payload shape** (`{ devices: [{ name, distance, angle,
+… }] }`), which is why one card renders either.
 
 ## Project layout
 
@@ -281,8 +339,17 @@ custom_components/bluetooth_radar/
   radar.py           advertisement tracker, distance model, snapshots
   websocket_api.py   bluetooth_radar/list + /subscribe commands
   translations/en.json
+custom_components/flight_radar/
+  __init__.py        setup / teardown
+  manifest.json
+  const.py           defaults & option keys
+  config_flow.py     UI setup + options (location, range, source, creds)
+  sources.py         OpenSky + local ADS-B fetchers
+  coordinator.py     polling + haversine distance / bearing, snapshots
+  websocket_api.py   flight_radar/list + /subscribe commands
+  translations/en.json
 www/
-  bluetooth-radar-card.js   the radar Lovelace card
+  bluetooth-radar-card.js   one file → bluetooth-radar-card + flight-radar-card
 ```
 
 ## License
