@@ -75,6 +75,7 @@ def websocket_subscribe(
     {
         vol.Required("type"): "flight_radar/route",
         vol.Required("callsign"): str,
+        vol.Optional("icao24"): str,
     }
 )
 @websocket_api.async_response
@@ -83,10 +84,10 @@ async def websocket_route(
     connection: websocket_api.ActiveConnection,
     msg: dict[str, Any],
 ) -> None:
-    """Look up departure/arrival airports for a callsign (best-effort)."""
+    """Look up route + aircraft details for a flight (best-effort)."""
     coordinator = _get_coordinator(hass)
     if coordinator is None:
         connection.send_error(msg["id"], "not_loaded", "Flight Radar not set up")
         return
-    route = await coordinator.async_get_route(msg["callsign"])
+    route = await coordinator.async_get_route(msg["callsign"], msg.get("icao24"))
     connection.send_result(msg["id"], route)

@@ -29,11 +29,80 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 _LOGGER = logging.getLogger(__name__)
 
 OPENSKY_STATES_URL = "https://opensky-network.org/api/states/all"
-OPENSKY_ROUTES_URL = "https://opensky-network.org/api/routes"
 OPENSKY_TOKEN_URL = (
     "https://auth.opensky-network.org/auth/realms/opensky-network/"
     "protocol/openid-connect/token"
 )
+
+# adsbdb.com — free, keyless callsign->route and hex->aircraft lookups.
+# Independent of the live-data source, so routes work for OpenSky *and* local.
+ADSBDB_BASE = "https://api.adsbdb.com/v0"
+
+
+async def async_lookup_route(
+    session: aiohttp.ClientSession, callsign: str
+) -> dict[str, Any]:
+    """Departure/arrival airports for a callsign via adsbdb (best-effort)."""
+    callsign = (callsign or "").strip()
+    if not callsign:
+        return {}
+    try:
+        async with session.get(
+            f"{ADSBDB_BASE}/callsign/{callsign}", timeout=15
+        ) as resp:
+            if resp.status != 200:
+                return {}
+            data = await resp.json()
+    except (aiohttp.ClientError, ValueError):
+        return {}
+
+    response = data.get("response")
+    flightroute = response.get("flightroute") if isinstance(response, dict) else None
+    if not flightroute:
+        return {}
+    origin = flightroute.get("origin") or {}
+    dest = flightroute.get("destination") or {}
+
+    def _code(airport: dict) -> str | None:
+        return airport.get("iata_code") or airport.get("icao_code")
+
+    return {
+        "departure": _code(origin),
+        "arrival": _code(dest),
+        "departure_name": origin.get("name"),
+        "arrival_name": dest.get("name"),
+        "departure_city": origin.get("municipality"),
+        "arrival_city": dest.get("municipality"),
+    }
+
+
+async def async_lookup_aircraft(
+    session: aiohttp.ClientSession, icao24: str
+) -> dict[str, Any]:
+    """Registration/type for an ICAO24 hex via adsbdb (best-effort)."""
+    hex_id = (icao24 or "").strip().lower()
+    if not hex_id:
+        return {}
+    try:
+        async with session.get(
+            f"{ADSBDB_BASE}/aircraft/{hex_id}", timeout=15
+        ) as resp:
+            if resp.status != 200:
+                return {}
+            data = await resp.json()
+    except (aiohttp.ClientError, ValueError):
+        return {}
+
+    response = data.get("response")
+    aircraft = response.get("aircraft") if isinstance(response, dict) else None
+    if not aircraft:
+        return {}
+    return {
+        "registration": aircraft.get("registration"),
+        "aircraft_type": aircraft.get("type"),
+        "aircraft_manufacturer": aircraft.get("manufacturer"),
+        "operator": aircraft.get("registered_owner"),
+    }
 
 
 @dataclass
@@ -127,37 +196,6 @@ class OpenSkySource:
             )
         return aircraft
 
-    async def async_route(
-        self, session: aiohttp.ClientSession, callsign: str
-    ) -> dict:
-        """Best-effort departure/arrival airport lookup for a callsign.
-
-        Uses OpenSky's /routes endpoint, which is separate from the live feed
-        and not always available — any failure returns {} so the UI degrades
-        gracefully to an external link.
-        """
-        callsign = (callsign or "").strip()
-        if not callsign:
-            return {}
-        try:
-            token = await self._async_token(session)
-            headers = {"Authorization": f"Bearer {token}"} if token else {}
-            async with session.get(
-                OPENSKY_ROUTES_URL,
-                params={"callsign": callsign},
-                headers=headers,
-                timeout=15,
-            ) as resp:
-                if resp.status != 200:
-                    return {}
-                data = await resp.json()
-        except (aiohttp.ClientError, UpdateFailed, ValueError):
-            return {}
-        route = data.get("route") or []
-        if not route:
-            return {}
-        return {"departure": route[0], "arrival": route[-1], "route": route}
-
 
 class LocalAdsbSource:
     """Fetch aircraft from a local dump1090 / tar1090 / readsb aircraft.json."""
@@ -205,7 +243,3 @@ class LocalAdsbSource:
                 }
             )
         return aircraft
-
-    async def async_route(self, session, callsign):  # noqa: D102
-        # Local receivers don't provide route info.
-        return {}

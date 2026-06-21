@@ -37,3 +37,7 @@ MPS_TO_FTMIN = 196.850394
 # Route (departure/arrival) lookups are cached this long (seconds); routes for
 # a callsign rarely change within a flight.
 ROUTE_CACHE_TTL = 3600
+
+# Max NEW route lookups per poll cycle, so labels fill in gradually (nearest
+# aircraft first) instead of hammering adsbdb on the first poll.
+MAX_ROUTE_LOOKUPS_PER_CYCLE = 8

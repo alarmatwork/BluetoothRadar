@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 import time
@@ -27,12 +28,19 @@ from .const import (
     DEFAULT_SOURCE,
     DOMAIN,
     M_TO_FT,
+    MAX_ROUTE_LOOKUPS_PER_CYCLE,
     MPS_TO_FTMIN,
     MPS_TO_KT,
     ROUTE_CACHE_TTL,
     SOURCE_LOCAL,
 )
-from .sources import BBox, LocalAdsbSource, OpenSkySource
+from .sources import (
+    BBox,
+    LocalAdsbSource,
+    OpenSkySource,
+    async_lookup_aircraft,
+    async_lookup_route,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -81,8 +89,10 @@ class FlightRadarCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
                 opts.get(CONF_OPENSKY_CLIENT_SECRET),
             )
 
-        # callsign -> (timestamp, {departure, arrival, route})
+        # click lookups: "callsign|hex" -> (timestamp, full details)
         self._route_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+        # label routes: callsign -> (timestamp, {departure, arrival, ...})
+        self._label_route_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
         super().__init__(
             hass,
@@ -140,20 +150,67 @@ class FlightRadarCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
                 }
             )
         blips.sort(key=lambda b: b["distance"])
+        await self._enrich_routes(blips)
         return blips
 
-    async def async_get_route(self, callsign: str) -> dict[str, Any]:
-        """Return {departure, arrival, route} for a callsign (cached)."""
+    async def _enrich_routes(self, blips: list[dict[str, Any]]) -> None:
+        """Attach departure/arrival to blips for the on-radar label.
+
+        Cached results are applied immediately; a throttled batch of NEW
+        lookups runs per cycle (nearest aircraft first, since blips are sorted
+        by distance) so labels fill in over a few polls without flooding adsbdb.
+        """
+        now = time.time()
+        session = async_get_clientsession(self.hass)
+        pending: list[tuple[dict[str, Any], str]] = []
+        for blip in blips:
+            callsign = (blip.get("name") or "").strip()
+            if not callsign:
+                continue
+            cached = self._label_route_cache.get(callsign)
+            if cached and (now - cached[0]) < ROUTE_CACHE_TTL:
+                blip["departure"] = cached[1].get("departure")
+                blip["arrival"] = cached[1].get("arrival")
+            else:
+                pending.append((blip, callsign))
+
+        if not pending:
+            return
+        batch = pending[:MAX_ROUTE_LOOKUPS_PER_CYCLE]
+        results = await asyncio.gather(
+            *(async_lookup_route(session, cs) for _, cs in batch),
+            return_exceptions=True,
+        )
+        for (blip, callsign), result in zip(batch, results):
+            route = {} if isinstance(result, BaseException) else (result or {})
+            self._label_route_cache[callsign] = (time.time(), route)
+            blip["departure"] = route.get("departure")
+            blip["arrival"] = route.get("arrival")
+
+    async def async_get_route(
+        self, callsign: str, icao24: str | None = None
+    ) -> dict[str, Any]:
+        """Route (dep/arr) + aircraft (registration/type) for a flight, cached.
+
+        Uses adsbdb.com, which is independent of the live-data source, so this
+        works whether you're on OpenSky or a local ADS-B receiver.
+        """
         callsign = (callsign or "").strip()
-        if not callsign:
+        key = f"{callsign}|{(icao24 or '').lower()}"
+        if not callsign and not icao24:
             return {}
-        cached = self._route_cache.get(callsign)
+        cached = self._route_cache.get(key)
         if cached and (time.time() - cached[0]) < ROUTE_CACHE_TTL:
             return cached[1]
+
         session = async_get_clientsession(self.hass)
-        route = await self.source.async_route(session, callsign)
-        self._route_cache[callsign] = (time.time(), route)
-        return route
+        result: dict[str, Any] = {}
+        if callsign:
+            result.update(await async_lookup_route(session, callsign))
+        if icao24:
+            result.update(await async_lookup_aircraft(session, icao24))
+        self._route_cache[key] = (time.time(), result)
+        return result
 
     def snapshot(self) -> dict[str, Any]:
         return {

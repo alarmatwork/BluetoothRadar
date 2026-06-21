@@ -288,11 +288,12 @@ size). Two ways to enlarge it:
 Click any blip to open a details panel (click empty space to close):
 
 - **Flights:** callsign, ICAO24 hex, country, altitude, speed, heading, vertical
-  rate, squawk, distance, bearing and position. It also tries to show the
-  **route (departure → arrival)** via OpenSky's `/routes` endpoint — that lookup
-  is best-effort and often unavailable, so the panel always includes
-  **ADS-B Exchange** and **FlightRadar24** links where you can see the full
-  route. (Route lookup needs the OpenSky source; local ADS-B has no route data.)
+  rate, squawk, distance, bearing and position, plus the **route (departure →
+  arrival)** and **aircraft registration/type/operator** looked up from the free
+  [adsbdb.com](https://www.adsbdb.com) API (works with either data source). The
+  **departure→arrival** is also drawn under the callsign on the scope for nearby
+  aircraft. Route lookups are best-effort and cached; the panel always includes
+  **ADS-B Exchange** and **FlightRadar24** links as a fallback.
 - **Bluetooth:** name, address (+ public/random type), RSSI, estimated
   distance, manufacturer, company IDs, TX power, connectable, **closest proxy +
   how many proxies heard it (and each one's RSSI)**, advertised service UUIDs
@@ -300,9 +301,10 @@ Click any blip to open a details panel (click empty space to close):
   (UUID/major/minor/power) and **Eddystone URL** when present, and last-seen age.
   The manufacturer (when known) is also shown under the name on the scope.
 
-> Note on source/destination airports: the live OpenSky feed only carries
-> position/altitude/speed/heading — **not** route. That's why dep→arr is
-> best-effort plus external links rather than guaranteed.
+> Note on source/destination airports: live feeds (OpenSky / ADS-B) only carry
+> position/altitude/speed/heading — **not** route. Route comes from a separate
+> callsign→airports database (adsbdb), so it's best-effort plus external links
+> rather than guaranteed.
 
 **Quick troubleshooting:**
 

@@ -388,10 +388,14 @@ class RadarCard extends HTMLElement {
 
   _subLabels(dev, unit) {
     if (this._mode === "flights") {
+      const lines = [];
+      if (dev.departure && dev.arrival)
+        lines.push(`${dev.departure}→${dev.arrival}`);
       const parts = [];
       if (dev.altitude != null) parts.push(`${dev.altitude}ft`);
       if (dev.distance != null) parts.push(`${dev.distance}${unit}`);
-      return parts.length ? [parts.join("  ")] : [];
+      if (parts.length) lines.push(parts.join("  "));
+      return lines;
     }
     // Bluetooth: manufacturer under the name/MAC, then distance.
     const lines = [];
@@ -533,6 +537,9 @@ class RadarCard extends HTMLElement {
       const cs = (dev.name || "").trim();
       extra = `
         <div class="k">Route</div><div class="v" id="route">…</div>
+        <div class="k" id="reg-k" hidden>Reg.</div><div class="v" id="reg" hidden></div>
+        <div class="k" id="type-k" hidden>Aircraft</div><div class="v" id="type" hidden></div>
+        <div class="k" id="op-k" hidden>Operator</div><div class="v" id="op" hidden></div>
         <div class="links">
           ${hex ? `<a href="https://globe.adsbexchange.com/?icao=${hex}" target="_blank" rel="noopener">track on ADS-B Exchange ↗</a>` : ""}
           ${cs ? `<a href="https://www.flightradar24.com/${encodeURIComponent(cs)}" target="_blank" rel="noopener">FlightRadar24 ↗</a>` : ""}
@@ -554,34 +561,62 @@ class RadarCard extends HTMLElement {
 
   _fetchRoute(dev) {
     const cs = (dev.name || "").trim();
-    const setLine = (text) => {
+    const hex = (dev.icao24 || dev.address || "").trim();
+    const apply = (r) => {
       if (this._selected !== dev.address || !this._detailsEl) return;
-      const el = this._detailsEl.querySelector("#route");
-      if (el) el.textContent = text;
+      const routeEl = this._detailsEl.querySelector("#route");
+      if (routeEl) routeEl.textContent = this._routeText(r);
+      this._fillRow("reg", r.registration);
+      const type = [r.aircraft_manufacturer, r.aircraft_type]
+        .filter(Boolean)
+        .join(" ");
+      this._fillRow("type", type || null);
+      this._fillRow("op", r.operator);
     };
-    if (!cs) {
-      setLine("n/a");
-      return;
-    }
-    if (this._routeCache.has(cs)) {
-      setLine(this._routeText(this._routeCache.get(cs)));
+    const key = `${cs}|${hex}`;
+    if (this._routeCache.has(key)) {
+      apply(this._routeCache.get(key));
       return;
     }
     if (!this._hass || !this._hass.connection) {
-      setLine("unavailable");
+      apply({});
       return;
     }
     this._hass.connection
-      .sendMessagePromise({ type: "flight_radar/route", callsign: cs })
-      .then((r) => {
-        this._routeCache.set(cs, r || {});
-        setLine(this._routeText(r || {}));
+      .sendMessagePromise({
+        type: "flight_radar/route",
+        callsign: cs,
+        icao24: hex,
       })
-      .catch(() => setLine("unavailable"));
+      .then((r) => {
+        r = r || {};
+        this._routeCache.set(key, r);
+        apply(r);
+      })
+      .catch(() => apply({}));
+  }
+
+  _fillRow(id, value) {
+    if (!this._detailsEl) return;
+    const v = this._detailsEl.querySelector(`#${id}`);
+    const k = this._detailsEl.querySelector(`#${id}-k`);
+    if (!v || !k) return;
+    if (value) {
+      v.textContent = value;
+      v.hidden = false;
+      k.hidden = false;
+    } else {
+      v.hidden = true;
+      k.hidden = true;
+    }
   }
 
   _routeText(r) {
-    if (r && r.departure && r.arrival) return `${r.departure} → ${r.arrival}`;
+    if (r && r.departure && r.arrival) {
+      const names = [r.departure_city, r.arrival_city].filter(Boolean);
+      const suffix = names.length === 2 ? `  (${names[0]} → ${names[1]})` : "";
+      return `${r.departure} → ${r.arrival}${suffix}`;
+    }
     return "unavailable (try the links)";
   }
 
@@ -729,7 +764,7 @@ window.customCards.push(
 );
 
 console.info(
-  "%c RADAR-CARD %c v1.2.0  (bluetooth + flights, click-to-inspect) ",
+  "%c RADAR-CARD %c v1.3.0  (multi-proxy BT + flight routes) ",
   "color: #050d08; background: #00ff66; font-weight: 700;",
   "color: #00ff66; background: #050d08;"
 );
