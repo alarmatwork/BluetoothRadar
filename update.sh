@@ -56,8 +56,11 @@ ln -sfn "$SRC/custom_components/bluetooth_radar" "$CC/bluetooth_radar"
 ln -sfn "$SRC/custom_components/flight_radar"    "$CC/flight_radar"
 
 # --- copy the card (symlinks aren't served from www) ---
+# Remove the destination first: if it's an old symlink, plain cp would error
+# ("are the same file") or follow it; rm guarantees we write a real file.
 echo "==> copying card"
-cp -f "$SRC/www/bluetooth-radar-card.js" "$WWW/bluetooth-radar-card.js"
+rm -f "$WWW/bluetooth-radar-card.js"
+cp "$SRC/www/bluetooth-radar-card.js" "$WWW/bluetooth-radar-card.js"
 
 # --- verify ---
 echo "==> deployed:"
