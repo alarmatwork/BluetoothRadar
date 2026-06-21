@@ -56,58 +56,143 @@ card is the playful single-receiver cousin.
 
 ## Installation
 
-### 1. Integration (backend)
-
-Copy `custom_components/bluetooth_radar/` into your HA config directory:
-
-```
-<config>/custom_components/bluetooth_radar/
-```
-
-Restart Home Assistant, then go to **Settings → Devices & Services → Add
-Integration → Bluetooth Radar**. You'll be asked for:
-
-| Option | Default | Meaning |
-|--------|---------|---------|
-| Measured power | `-59` dBm | RSSI at 1 m from a reference device. Lower (more negative) ⇒ devices read as further away. |
-| Path-loss exponent | `2.5` | `2.0` = open space, `3–4` = lots of walls. Higher ⇒ distance grows faster. |
-| Outer range | `15` m | The outermost radar ring. |
-| Drop after | `60` s | Remove a device not heard from in this long. |
-
-These can be retuned anytime via the integration's **Configure** button — no
-restart needed.
-
-### 2. Card (frontend)
-
-Copy `www/bluetooth-radar-card.js` into your HA config:
+This add-on has **two parts** that must end up at these exact paths inside your
+HA config directory (the folder that contains `configuration.yaml`):
 
 ```
-<config>/www/bluetooth-radar-card.js
+<config>/custom_components/bluetooth_radar/    ← the integration (Python)
+<config>/www/bluetooth-radar-card.js           ← the dashboard card (JS)
 ```
 
-Add it as a Lovelace resource (**Settings → Dashboards → ⋮ → Resources →
-Add**):
+> On HA OS / Supervised, or in the **Terminal & SSH** add-on, `<config>` is
+> **`/config`**. On a bare Docker container it's whatever you mounted (e.g.
+> `/volume1/docker/homeassistant`). Confirm with `ls <config>` — you should see
+> `configuration.yaml`.
 
-```
-URL:  /local/bluetooth-radar-card.js
-Type: JavaScript Module
+Pick **one** of the methods below.
+
+### Step 1 — Get the files onto Home Assistant
+
+#### Method A — Git checkout (recommended)
+
+Open the HA **Terminal & SSH** add-on (or SSH into the host), then:
+
+```bash
+cd /config                                   # your HA config dir
+
+# clone into a source folder (NOT directly into custom_components/)
+git clone https://github.com/alarmatwork/BluetoothRadar.git bluetooth-radar-src
+
+# make sure the target folders exist
+mkdir -p custom_components www
+
+# link the two pieces into the spots HA reads from
+ln -s ../bluetooth-radar-src/custom_components/bluetooth_radar custom_components/bluetooth_radar
+ln -s ../bluetooth-radar-src/www/bluetooth-radar-card.js www/bluetooth-radar-card.js
 ```
 
-Then add the card to a dashboard:
+> ⚠️ Don't `git clone` *directly into* `custom_components/` — you'd get
+> `custom_components/BluetoothRadar/custom_components/bluetooth_radar/…` (nested
+> wrong) and HA won't find it. Clone into `bluetooth-radar-src` and link/copy as
+> shown.
 
-```yaml
-type: custom:bluetooth-radar-card
-title: Bluetooth Radar
-# optional overrides:
-# max_distance: 15      # outer ring in metres (defaults to integration setting)
-# sweep_seconds: 4      # seconds per full sweep revolution
-# show_labels: true     # device name + distance next to each blip
-# name_filter: "iphone" # only show devices whose name contains this
+If `git` is missing, `apk add git` usually works in the add-on. If symlinks
+aren't picked up in your setup, **copy instead**:
+
+```bash
+cp -r bluetooth-radar-src/custom_components/bluetooth_radar /config/custom_components/
+cp bluetooth-radar-src/www/bluetooth-radar-card.js /config/www/
 ```
+
+**Updating later:** `cd /config/bluetooth-radar-src && git pull`, then restart HA
+(for integration changes) or hard-refresh the browser (for card-only changes).
+
+#### Method B — Manual copy / rsync
+
+Copy the same two paths from this repo into `<config>/custom_components/` and
+`<config>/www/`. See [Deploying to your NAS](#deploying-to-your-nas) for ready
+made `rsync` commands.
+
+### Step 2 — Set up the integration
+
+1. **Restart Home Assistant** (Settings → System → ⋮ → **Restart**) so it picks
+   up the new `custom_components` folder.
+2. Go to **Settings → Devices & Services → Add Integration**, search for
+   **Bluetooth Radar**, and add it. You'll be asked for:
+
+   | Option | Default | Meaning |
+   |--------|---------|---------|
+   | Measured power | `-59` dBm | RSSI at 1 m from a reference device. Lower (more negative) ⇒ devices read as further away. |
+   | Path-loss exponent | `2.5` | `2.0` = open space, `3–4` = lots of walls. Higher ⇒ distance grows faster. |
+   | Outer range | `15` m | The outermost radar ring. |
+   | Drop after | `60` s | Remove a device not heard from in this long. |
+
+   These can be retuned anytime via the integration's **Configure** button — no
+   restart needed.
+
+### Step 3 — Register the card as a Lovelace resource
+
+The card's JS file has to be registered once before any dashboard can use it.
+
+- **UI / "storage" mode dashboards (the default):**
+  **Settings → Dashboards → ⋮ (top right) → Resources → Add Resource:**
+
+  ```
+  URL:  /local/bluetooth-radar-card.js
+  Type: JavaScript Module
+  ```
+
+  (`/local/` maps to `<config>/www/`.) After saving, **hard-refresh** your
+  browser (Ctrl/Cmd-Shift-R).
+
+  > Don't see a **Resources** menu? Enable **Advanced Mode** in your user
+  > profile (bottom-left avatar → toggle **Advanced Mode**).
+
+- **YAML-mode dashboards only:** add it under `lovelace:` in
+  `configuration.yaml` instead:
+
+  ```yaml
+  lovelace:
+    resources:
+      - url: /local/bluetooth-radar-card.js
+        type: module
+  ```
+
+### Step 4 — Add the card to a dashboard (for testing)
+
+1. Open the dashboard where you want the radar.
+2. Click the ✏️ **pencil (Edit dashboard)** in the top-right → **+ Add Card**.
+3. Scroll to the bottom and choose **Manual** (or search for
+   "Bluetooth Radar Card" in the picker).
+4. Paste this and click **Save**:
+
+   ```yaml
+   type: custom:bluetooth-radar-card
+   title: Bluetooth Radar
+   # optional overrides:
+   # max_distance: 15      # outer ring in metres (defaults to integration setting)
+   # sweep_seconds: 4      # seconds per full sweep revolution
+   # show_labels: true     # device name + distance next to each blip
+   # name_filter: "iphone" # only show devices whose name contains this
+   ```
+
+You should see a green radar scope with a rotating sweep. Within a few seconds,
+blips appear as your proxy reports BLE devices. The header shows a live device
+count.
+
+**Quick troubleshooting:**
+
+| Symptom | Likely cause / fix |
+|---------|--------------------|
+| `Custom element doesn't exist: bluetooth-radar-card` | Resource not registered (Step 3) or browser cached — hard-refresh, or add `?v=2` to the resource URL. |
+| Card shows "integration not found" | Integration not added/loaded (Step 2) — check it appears under Devices & Services. |
+| Sweep spins but no blips ever appear | No BLE devices in range, or your Bluetooth proxy isn't feeding HA. Check **Settings → Devices & Services → Bluetooth** sees advertisements. |
+| Blips all sit on the outer ring | Devices report no RSSI, or `max_distance` is too small — raise it, or tune **measured power**. |
 
 > **HACS:** this repo also works as a custom HACS repository (integration +
 > Lovelace plugin). Add it as a custom repository if you prefer managed
-> updates.
+> updates — HACS installs the integration and registers the card resource for
+> you (you still restart HA after integration updates).
 
 ## Deploying to your NAS
 
