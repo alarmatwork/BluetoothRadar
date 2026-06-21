@@ -27,7 +27,9 @@ from .const import (
     DEFAULT_SOURCE,
     DOMAIN,
     M_TO_FT,
+    MPS_TO_FTMIN,
     MPS_TO_KT,
+    ROUTE_CACHE_TTL,
     SOURCE_LOCAL,
 )
 from .sources import BBox, LocalAdsbSource, OpenSkySource
@@ -79,6 +81,9 @@ class FlightRadarCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
                 opts.get(CONF_OPENSKY_CLIENT_SECRET),
             )
 
+        # callsign -> (timestamp, {departure, arrival, route})
+        self._route_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+
         super().__init__(
             hass,
             _LOGGER,
@@ -114,19 +119,41 @@ class FlightRadarCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
             )
             alt_m = ac.get("altitude_m")
             speed_mps = ac.get("speed_mps")
+            vrate_mps = ac.get("vertical_rate_mps")
             blips.append(
                 {
                     "address": ac.get("icao24") or ac.get("callsign") or "?",
                     "name": ac.get("callsign") or ac.get("icao24") or "?",
+                    "icao24": ac.get("icao24"),
+                    "country": ac.get("origin_country"),
                     "distance": round(distance, 1),
                     "angle": round(bearing, 1),
                     "heading": round(ac["track"]) if ac.get("track") is not None else None,
                     "altitude": round(alt_m * M_TO_FT) if alt_m is not None else None,
                     "speed": round(speed_mps * MPS_TO_KT) if speed_mps is not None else None,
+                    "vertical_rate": round(vrate_mps * MPS_TO_FTMIN)
+                    if vrate_mps is not None
+                    else None,
+                    "squawk": ac.get("squawk"),
+                    "lat": round(ac["lat"], 4),
+                    "lon": round(ac["lon"], 4),
                 }
             )
         blips.sort(key=lambda b: b["distance"])
         return blips
+
+    async def async_get_route(self, callsign: str) -> dict[str, Any]:
+        """Return {departure, arrival, route} for a callsign (cached)."""
+        callsign = (callsign or "").strip()
+        if not callsign:
+            return {}
+        cached = self._route_cache.get(callsign)
+        if cached and (time.time() - cached[0]) < ROUTE_CACHE_TTL:
+            return cached[1]
+        session = async_get_clientsession(self.hass)
+        route = await self.source.async_route(session, callsign)
+        self._route_cache[callsign] = (time.time(), route)
+        return route
 
     def snapshot(self) -> dict[str, Any]:
         return {

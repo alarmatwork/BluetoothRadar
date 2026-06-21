@@ -32,3 +32,8 @@ CONF_LOCAL_URL = "local_url"
 # Conversions for display.
 M_TO_FT = 3.28084
 MPS_TO_KT = 1.943844
+MPS_TO_FTMIN = 196.850394
+
+# Route (departure/arrival) lookups are cached this long (seconds); routes for
+# a callsign rarely change within a flight.
+ROUTE_CACHE_TTL = 3600

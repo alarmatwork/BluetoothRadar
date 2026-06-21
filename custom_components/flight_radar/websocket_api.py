@@ -22,6 +22,7 @@ def async_register(hass: HomeAssistant) -> None:
     hass.data[_WS_REGISTERED] = True
     websocket_api.async_register_command(hass, websocket_list)
     websocket_api.async_register_command(hass, websocket_subscribe)
+    websocket_api.async_register_command(hass, websocket_route)
 
 
 def _get_coordinator(hass: HomeAssistant) -> FlightRadarCoordinator | None:
@@ -68,3 +69,24 @@ def websocket_subscribe(
     connection.subscriptions[msg["id"]] = coordinator.async_add_listener(_forward)
     connection.send_result(msg["id"])
     _forward()
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "flight_radar/route",
+        vol.Required("callsign"): str,
+    }
+)
+@websocket_api.async_response
+async def websocket_route(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Look up departure/arrival airports for a callsign (best-effort)."""
+    coordinator = _get_coordinator(hass)
+    if coordinator is None:
+        connection.send_error(msg["id"], "not_loaded", "Flight Radar not set up")
+        return
+    route = await coordinator.async_get_route(msg["callsign"])
+    connection.send_result(msg["id"], route)

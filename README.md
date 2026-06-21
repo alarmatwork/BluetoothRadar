@@ -278,6 +278,23 @@ size). Two ways to enlarge it:
   view's ⚙️ settings, set **View type: Panel**. A panel view gives the single
   card the full screen width, so the radar fills it.
 
+#### Click a blip for details
+
+Click any blip to open a details panel (click empty space to close):
+
+- **Flights:** callsign, ICAO24 hex, country, altitude, speed, heading, vertical
+  rate, squawk, distance, bearing and position. It also tries to show the
+  **route (departure → arrival)** via OpenSky's `/routes` endpoint — that lookup
+  is best-effort and often unavailable, so the panel always includes
+  **ADS-B Exchange** and **FlightRadar24** links where you can see the full
+  route. (Route lookup needs the OpenSky source; local ADS-B has no route data.)
+- **Bluetooth:** name, address, RSSI, estimated distance, manufacturer, TX
+  power, which proxy heard it, service count and last-seen age.
+
+> Note on source/destination airports: the live OpenSky feed only carries
+> position/altitude/speed/heading — **not** route. That's why dep→arr is
+> best-effort plus external links rather than guaranteed.
+
 **Quick troubleshooting:**
 
 | Symptom | Likely cause / fix |

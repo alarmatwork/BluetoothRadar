@@ -29,6 +29,7 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 _LOGGER = logging.getLogger(__name__)
 
 OPENSKY_STATES_URL = "https://opensky-network.org/api/states/all"
+OPENSKY_ROUTES_URL = "https://opensky-network.org/api/routes"
 OPENSKY_TOKEN_URL = (
     "https://auth.opensky-network.org/auth/realms/opensky-network/"
     "protocol/openid-connect/token"
@@ -113,15 +114,49 @@ class OpenSkySource:
                 {
                     "icao24": s[0],
                     "callsign": (s[1] or "").strip(),
+                    "origin_country": s[2],
                     "lat": lat,
                     "lon": lon,
                     "altitude_m": s[13] if s[13] is not None else s[7],
                     "speed_mps": s[9],
                     "track": s[10],
+                    "vertical_rate_mps": s[11],
+                    "squawk": s[14],
                     "on_ground": bool(s[8]),
                 }
             )
         return aircraft
+
+    async def async_route(
+        self, session: aiohttp.ClientSession, callsign: str
+    ) -> dict:
+        """Best-effort departure/arrival airport lookup for a callsign.
+
+        Uses OpenSky's /routes endpoint, which is separate from the live feed
+        and not always available — any failure returns {} so the UI degrades
+        gracefully to an external link.
+        """
+        callsign = (callsign or "").strip()
+        if not callsign:
+            return {}
+        try:
+            token = await self._async_token(session)
+            headers = {"Authorization": f"Bearer {token}"} if token else {}
+            async with session.get(
+                OPENSKY_ROUTES_URL,
+                params={"callsign": callsign},
+                headers=headers,
+                timeout=15,
+            ) as resp:
+                if resp.status != 200:
+                    return {}
+                data = await resp.json()
+        except (aiohttp.ClientError, UpdateFailed, ValueError):
+            return {}
+        route = data.get("route") or []
+        if not route:
+            return {}
+        return {"departure": route[0], "arrival": route[-1], "route": route}
 
 
 class LocalAdsbSource:
@@ -149,16 +184,28 @@ class LocalAdsbSource:
             alt_m = alt * 0.3048 if isinstance(alt, (int, float)) else None
             gs = a.get("gs")
             speed_mps = gs * 0.514444 if isinstance(gs, (int, float)) else None
+            baro_rate = a.get("baro_rate")  # ft/min in tar1090
             aircraft.append(
                 {
                     "icao24": a.get("hex"),
                     "callsign": (a.get("flight") or "").strip(),
+                    "origin_country": None,
                     "lat": lat,
                     "lon": lon,
                     "altitude_m": alt_m,
                     "speed_mps": speed_mps,
                     "track": a.get("track"),
+                    # tar1090 baro_rate is already ft/min; convert to m/s so the
+                    # coordinator's single conversion path applies.
+                    "vertical_rate_mps": baro_rate / 196.850394
+                    if isinstance(baro_rate, (int, float))
+                    else None,
+                    "squawk": a.get("squawk"),
                     "on_ground": alt == "ground",
                 }
             )
         return aircraft
+
+    async def async_route(self, session, callsign):  # noqa: D102
+        # Local receivers don't provide route info.
+        return {}

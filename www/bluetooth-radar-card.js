@@ -51,6 +51,8 @@ class RadarCard extends HTMLElement {
     this._lastFrame = 0;
     this._unsub = null;
     this._raf = null;
+    this._selected = null; // address of the blip whose details are open
+    this._routeCache = new Map();
   }
 
   // Subclasses override to set the default mode.
@@ -127,6 +129,13 @@ class RadarCard extends HTMLElement {
     const noun = NOUN[this._mode];
     const n = this._devices.length;
     this._setStatus(`${n} ${noun}${n === 1 ? "" : "s"} in range`);
+
+    // Keep an open details panel in sync; close it if the blip is gone.
+    if (this._selected) {
+      const dev = this._devices.find((d) => d.address === this._selected);
+      if (!dev) this._hideDetails();
+      else this._renderDetails(dev);
+    }
   }
 
   _setStatus(text) {
@@ -313,6 +322,14 @@ class RadarCard extends HTMLElement {
       ctx.arc(bx, by, 9 * dpr, 0, TAU);
       ctx.fill();
 
+      if (blip.dev.address === this._selected) {
+        ctx.strokeStyle = `rgba(255, 255, 255, 0.9)`;
+        ctx.lineWidth = 1.5 * dpr;
+        ctx.beginPath();
+        ctx.arc(bx, by, 11 * dpr, 0, TAU);
+        ctx.stroke();
+      }
+
       if (isFlights && blip.dev.heading != null) {
         // Triangle pointing along the aircraft's track.
         const h = compassToCanvas(blip.dev.heading);
@@ -379,6 +396,158 @@ class RadarCard extends HTMLElement {
     return n.length > 18 ? n.slice(0, 17) + "…" : n;
   }
 
+  // --- click-to-inspect ---------------------------------------------------
+
+  _onCanvasClick(e) {
+    const rect = this._canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const size = this._canvas.clientWidth;
+    const cx = size / 2;
+    const cy = size / 2;
+    const R = size / 2 - 12;
+
+    let best = null;
+    let bestDist = 16; // px hit radius
+    for (const blip of this._blips.values()) {
+      if (!blip.dev) continue;
+      const r = blip.radius * R;
+      const bx = cx + Math.cos(blip.angle) * r;
+      const by = cy + Math.sin(blip.angle) * r;
+      const d = Math.hypot(x - bx, y - by);
+      if (d < bestDist) {
+        bestDist = d;
+        best = blip.dev;
+      }
+    }
+    if (best) {
+      this._selected = best.address;
+      this._renderDetails(best);
+    } else {
+      this._hideDetails();
+    }
+  }
+
+  _hideDetails() {
+    this._selected = null;
+    if (this._detailsEl) {
+      this._detailsEl.hidden = true;
+      this._detailsEl.innerHTML = "";
+    }
+  }
+
+  _detailRows(dev) {
+    const unit = this._unit || "";
+    const rows = [];
+    const add = (label, value) => {
+      if (value !== null && value !== undefined && value !== "")
+        rows.push([label, value]);
+    };
+    if (this._mode === "flights") {
+      add("Callsign", dev.name);
+      add("ICAO24", dev.icao24 || dev.address);
+      add("Country", dev.country);
+      add("Altitude", dev.altitude != null ? `${dev.altitude} ft` : null);
+      add("Speed", dev.speed != null ? `${dev.speed} kt` : null);
+      add("Heading", dev.heading != null ? `${dev.heading}°` : null);
+      if (dev.vertical_rate != null && dev.vertical_rate !== 0) {
+        const arrow = dev.vertical_rate > 0 ? "↑" : "↓";
+        add("Vert. rate", `${arrow} ${Math.abs(dev.vertical_rate)} ft/min`);
+      }
+      add("Squawk", dev.squawk);
+      add("Distance", dev.distance != null ? `${dev.distance} ${unit}` : null);
+      add("Bearing", dev.angle != null ? `${Math.round(dev.angle)}°` : null);
+      if (dev.lat != null && dev.lon != null)
+        add("Position", `${dev.lat}, ${dev.lon}`);
+    } else {
+      add("Name", dev.name);
+      add("Address", dev.address);
+      add("RSSI", dev.rssi != null ? `${dev.rssi} dBm` : null);
+      add("Distance", dev.distance != null ? `${dev.distance} ${unit}` : null);
+      add("Manufacturer", dev.manufacturer);
+      add("TX power", dev.tx_power != null ? `${dev.tx_power} dBm` : null);
+      add("Heard by", dev.source);
+      if (Array.isArray(dev.service_uuids) && dev.service_uuids.length)
+        add("Services", dev.service_uuids.length);
+      add("Last seen", dev.age != null ? `${dev.age}s ago` : null);
+    }
+    return rows;
+  }
+
+  _renderDetails(dev) {
+    if (!this._detailsEl) return;
+    const rows = this._detailRows(dev)
+      .map(
+        ([k, v]) =>
+          `<div class="k">${k}</div><div class="v">${this._esc(v)}</div>`
+      )
+      .join("");
+
+    let extra = "";
+    if (this._mode === "flights") {
+      const hex = (dev.icao24 || dev.address || "").toLowerCase();
+      const cs = (dev.name || "").trim();
+      extra = `
+        <div class="k">Route</div><div class="v" id="route">…</div>
+        <div class="links">
+          ${hex ? `<a href="https://globe.adsbexchange.com/?icao=${hex}" target="_blank" rel="noopener">track on ADS-B Exchange ↗</a>` : ""}
+          ${cs ? `<a href="https://www.flightradar24.com/${encodeURIComponent(cs)}" target="_blank" rel="noopener">FlightRadar24 ↗</a>` : ""}
+        </div>`;
+    }
+
+    this._detailsEl.innerHTML = `
+      <button class="close" title="Close">✕</button>
+      <div class="title">${this._esc(this._shortName(dev))}</div>
+      <div class="grid">${rows}${extra}</div>
+    `;
+    this._detailsEl.hidden = false;
+    this._detailsEl
+      .querySelector(".close")
+      .addEventListener("click", () => this._hideDetails());
+
+    if (this._mode === "flights") this._fetchRoute(dev);
+  }
+
+  _fetchRoute(dev) {
+    const cs = (dev.name || "").trim();
+    const setLine = (text) => {
+      if (this._selected !== dev.address || !this._detailsEl) return;
+      const el = this._detailsEl.querySelector("#route");
+      if (el) el.textContent = text;
+    };
+    if (!cs) {
+      setLine("n/a");
+      return;
+    }
+    if (this._routeCache.has(cs)) {
+      setLine(this._routeText(this._routeCache.get(cs)));
+      return;
+    }
+    if (!this._hass || !this._hass.connection) {
+      setLine("unavailable");
+      return;
+    }
+    this._hass.connection
+      .sendMessagePromise({ type: "flight_radar/route", callsign: cs })
+      .then((r) => {
+        this._routeCache.set(cs, r || {});
+        setLine(this._routeText(r || {}));
+      })
+      .catch(() => setLine("unavailable"));
+  }
+
+  _routeText(r) {
+    if (r && r.departure && r.arrival) return `${r.departure} → ${r.arrival}`;
+    return "unavailable (try the links)";
+  }
+
+  _esc(s) {
+    return String(s).replace(
+      /[&<>"]/g,
+      (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])
+    );
+  }
+
   _render() {
     const title =
       this._config.title || DEFAULT_TITLE[this._mode] || "Radar";
@@ -412,8 +581,56 @@ class RadarCard extends HTMLElement {
           height: 100%;
           display: block;
           border-radius: 50%;
+          cursor: pointer;
           box-shadow: 0 0 24px rgba(0, 255, 102, 0.25) inset,
                       0 0 12px rgba(0, 255, 102, 0.15);
+        }
+        .details {
+          position: absolute;
+          left: 8px;
+          bottom: 8px;
+          max-width: min(70%, 320px);
+          background: rgba(2, 18, 8, 0.92);
+          border: 1px solid rgba(0, 255, 102, 0.5);
+          border-radius: 6px;
+          padding: 10px 12px;
+          color: #00ff66;
+          font-family: monospace;
+          font-size: 12px;
+          box-shadow: 0 0 16px rgba(0, 255, 102, 0.25);
+        }
+        .details .title {
+          font-size: 13px;
+          font-weight: 700;
+          margin-bottom: 6px;
+          padding-right: 16px;
+        }
+        .details .grid {
+          display: grid;
+          grid-template-columns: auto 1fr;
+          gap: 2px 10px;
+        }
+        .details .k { opacity: 0.65; }
+        .details .v { text-align: right; word-break: break-word; }
+        .details .links {
+          grid-column: 1 / -1;
+          margin-top: 6px;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+        .details a { color: #6effa6; }
+        .details .close {
+          position: absolute;
+          top: 4px;
+          right: 6px;
+          background: none;
+          border: none;
+          color: #00ff66;
+          font-family: monospace;
+          font-size: 14px;
+          cursor: pointer;
+          line-height: 1;
         }
       </style>
       <ha-card>
@@ -421,12 +638,18 @@ class RadarCard extends HTMLElement {
           <span class="title">${title}</span>
           <span class="status" id="status">connecting…</span>
         </div>
-        <div class="scope"><canvas id="scope"></canvas></div>
+        <div class="scope">
+          <canvas id="scope"></canvas>
+          <div class="details" id="details" hidden></div>
+        </div>
       </ha-card>
     `;
     this._canvas = this.shadowRoot.getElementById("scope");
     this._ctx = this._canvas.getContext("2d");
     this._statusEl = this.shadowRoot.getElementById("status");
+    this._detailsEl = this.shadowRoot.getElementById("details");
+    this._canvas.addEventListener("click", (e) => this._onCanvasClick(e));
+    this._selected = null;
   }
 }
 
@@ -462,7 +685,7 @@ window.customCards.push(
 );
 
 console.info(
-  "%c RADAR-CARD %c v1.1.0  (bluetooth + flights) ",
+  "%c RADAR-CARD %c v1.2.0  (bluetooth + flights, click-to-inspect) ",
   "color: #050d08; background: #00ff66; font-weight: 700;",
   "color: #00ff66; background: #050d08;"
 );
