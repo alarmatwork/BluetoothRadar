@@ -5,8 +5,8 @@
         "title": "Flight Radar",
         "description": "Plots aircraft around a chosen location on a retro radar screen. Distance and bearing are real (from each aircraft's GPS position). Defaults to your Home Assistant location.",
         "data": {
-          "latitude": "Centre latitude",
-          "longitude": "Centre longitude",
+          "center_latitude": "Centre latitude",
+          "center_longitude": "Centre longitude",
           "radius": "Radar range (km)",
           "update_interval": "Update interval (seconds)",
           "source": "Data source",
@@ -28,8 +28,8 @@
       "init": {
         "title": "Flight Radar options",
         "data": {
-          "latitude": "Centre latitude",
-          "longitude": "Centre longitude",
+          "center_latitude": "Centre latitude",
+          "center_longitude": "Centre longitude",
           "radius": "Radar range (km)",
           "update_interval": "Update interval (seconds)",
           "source": "Data source",

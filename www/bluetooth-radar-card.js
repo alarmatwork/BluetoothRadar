@@ -53,6 +53,7 @@ class RadarCard extends HTMLElement {
     this._raf = null;
     this._selected = null; // address of the blip whose details are open
     this._routeCache = new Map();
+    this._center = null; // {lat, lon} of the radar centre (flights only)
   }
 
   // Subclasses override to set the default mode.
@@ -125,6 +126,7 @@ class RadarCard extends HTMLElement {
         : true
     );
     const cfg = msg.config || {};
+    if (cfg.center) this._center = cfg.center;
     if (cfg.unit) this._unit = cfg.unit;
     if (cfg.max_distance && !this._config.max_distance) {
       this._maxDistance = cfg.max_distance;
@@ -479,6 +481,31 @@ class RadarCard extends HTMLElement {
     }
   }
 
+  _onCanvasMove(e) {
+    if (!this._tooltipEl) return;
+    const rect = this._canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const size = this._canvas.clientWidth;
+    const cx = size / 2;
+    const cy = size / 2;
+    if (this._center && Math.hypot(x - cx, y - cy) < 14) {
+      const fmt = (n) => (typeof n === "number" ? n.toFixed(5) : n);
+      this._tooltipEl.textContent = `Centre: ${fmt(this._center.lat)}, ${fmt(this._center.lon)}`;
+      this._tooltipEl.style.left = `${x + 12}px`;
+      this._tooltipEl.style.top = `${y + 12}px`;
+      this._tooltipEl.hidden = false;
+      this._canvas.style.cursor = "help";
+    } else {
+      this._tooltipEl.hidden = true;
+      this._canvas.style.cursor = "pointer";
+    }
+  }
+
+  _hideTooltip() {
+    if (this._tooltipEl) this._tooltipEl.hidden = true;
+  }
+
   _detailRows(dev) {
     const unit = this._unit || "";
     const rows = [];
@@ -691,6 +718,19 @@ class RadarCard extends HTMLElement {
           box-shadow: 0 0 24px rgba(0, 255, 102, 0.25) inset,
                       0 0 12px rgba(0, 255, 102, 0.15);
         }
+        .tooltip {
+          position: absolute;
+          pointer-events: none;
+          background: rgba(2, 18, 8, 0.95);
+          border: 1px solid rgba(0, 255, 102, 0.5);
+          border-radius: 4px;
+          padding: 3px 6px;
+          color: #00ff66;
+          font-family: monospace;
+          font-size: 11px;
+          white-space: nowrap;
+          z-index: 2;
+        }
         .details {
           position: absolute;
           left: 8px;
@@ -704,7 +744,11 @@ class RadarCard extends HTMLElement {
           font-family: monospace;
           font-size: 12px;
           box-shadow: 0 0 16px rgba(0, 255, 102, 0.25);
+          /* Let the values be selected/copied. */
+          user-select: text;
+          -webkit-user-select: text;
         }
+        .details .v { cursor: text; }
         .details .title {
           font-size: 13px;
           font-weight: 700;
@@ -746,6 +790,7 @@ class RadarCard extends HTMLElement {
         </div>
         <div class="scope">
           <canvas id="scope"></canvas>
+          <div class="tooltip" id="tooltip" hidden></div>
           <div class="details" id="details" hidden></div>
         </div>
       </ha-card>
@@ -754,7 +799,10 @@ class RadarCard extends HTMLElement {
     this._ctx = this._canvas.getContext("2d");
     this._statusEl = this.shadowRoot.getElementById("status");
     this._detailsEl = this.shadowRoot.getElementById("details");
+    this._tooltipEl = this.shadowRoot.getElementById("tooltip");
     this._canvas.addEventListener("click", (e) => this._onCanvasClick(e));
+    this._canvas.addEventListener("mousemove", (e) => this._onCanvasMove(e));
+    this._canvas.addEventListener("mouseleave", () => this._hideTooltip());
     this._selected = null;
   }
 }
@@ -791,7 +839,7 @@ window.customCards.push(
 );
 
 console.info(
-  "%c RADAR-CARD %c v1.3.0  (multi-proxy BT + flight routes) ",
+  "%c RADAR-CARD %c v1.4.0  (centre tooltip + selectable details) ",
   "color: #050d08; background: #00ff66; font-weight: 700;",
   "color: #00ff66; background: #050d08;"
 );

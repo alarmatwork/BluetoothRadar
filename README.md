@@ -286,7 +286,9 @@ size). Two ways to enlarge it:
 
 #### Click a blip for details
 
-Click any blip to open a details panel (click empty space to close):
+Hover the **centre dot** to see the radar's centre lat/lon as a tooltip (flight
+mode). Values in the details panel are **selectable** so you can copy them. Click
+any blip to open the panel (click empty space to close):
 
 - **Flights:** callsign, ICAO24 hex, country, altitude, speed, heading, vertical
   rate, squawk, distance, bearing and position, plus the **route (departure →

@@ -5,8 +5,11 @@ from __future__ import annotations
 DOMAIN = "flight_radar"
 
 # Where to set the radar centre and how far it reaches.
-CONF_LATITUDE = "latitude"
-CONF_LONGITUDE = "longitude"
+# NB: the keys are deliberately NOT "latitude"/"longitude" — HA's frontend
+# special-cases those exact names into a combined map widget that fails to save
+# a manually-typed longitude. Custom names render as plain number fields.
+CONF_LATITUDE = "center_latitude"
+CONF_LONGITUDE = "center_longitude"
 CONF_RADIUS = "radius"  # km
 DEFAULT_RADIUS = 100.0
 
