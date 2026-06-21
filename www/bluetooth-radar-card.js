@@ -68,9 +68,9 @@ class RadarCard extends HTMLElement {
     this._size = Number(this._config.size) || null; // px; caps + centres the scope
     this._sweepSeconds = Number(this._config.sweep_seconds) || 4;
     this._showLabels = this._config.show_labels !== false;
-    // On-scope route label style: "codes" (LHR→JFK), "cities" (London→New York)
-    // or "off". Full airport names always appear in the click panel.
-    this._routeLabel = this._config.route_label || "codes";
+    // On-scope route label style: "cities" (London→New York, default),
+    // "codes" (LHR→JFK) or "off". Full airport names always show in the panel.
+    this._routeLabel = this._config.route_label || "cities";
     this._nameFilter = (this._config.name_filter || "").toLowerCase();
     this._unit = DEFAULT_UNIT[this._mode];
     // Resubscribe if the mode changed at runtime.
@@ -358,7 +358,7 @@ class RadarCard extends HTMLElement {
       if (this._showLabels && b > 0.25) {
         ctx.fillStyle = `rgba(${green}, ${b})`;
         ctx.font = `${11 * dpr}px monospace`;
-        ctx.fillText(this._shortName(blip.dev), bx + 7 * dpr, by - 4 * dpr);
+        ctx.fillText(this._mainLabel(blip.dev), bx + 7 * dpr, by - 4 * dpr);
         const subs = this._subLabels(blip.dev, unit);
         ctx.fillStyle = `rgba(${green}, ${0.6 * b})`;
         ctx.font = `${9 * dpr}px monospace`;
@@ -392,23 +392,40 @@ class RadarCard extends HTMLElement {
   _subLabels(dev, unit) {
     if (this._mode === "flights") {
       const lines = [];
-      if (this._routeLabel !== "off" && dev.departure && dev.arrival) {
-        if (this._routeLabel === "cities" && dev.departure_city && dev.arrival_city)
-          lines.push(`${dev.departure_city}→${dev.arrival_city}`);
-        else lines.push(`${dev.departure}→${dev.arrival}`);
-      }
+      // Route is the headline (see _mainLabel); put the callsign underneath
+      // when a route is shown, otherwise the callsign is already the headline.
+      if (this._flightRouteString(dev)) lines.push(this._shortName(dev));
       const parts = [];
       if (dev.altitude != null) parts.push(`${dev.altitude}ft`);
       if (dev.distance != null) parts.push(`${dev.distance}${unit}`);
       if (parts.length) lines.push(parts.join("  "));
       return lines;
     }
-    // Bluetooth: manufacturer under the name/MAC, then distance.
+    // Bluetooth: manufacturer is the headline (see _mainLabel); show the
+    // device name/MAC underneath, then distance.
     const lines = [];
-    const mfr = this._shortManufacturer(dev.manufacturer);
-    if (mfr) lines.push(mfr);
+    if (this._shortManufacturer(dev.manufacturer))
+      lines.push(this._shortName(dev));
     if (dev.distance != null) lines.push(`${dev.distance}${unit}`);
     return lines;
+  }
+
+  _mainLabel(dev) {
+    if (this._mode === "flights") {
+      const route = this._flightRouteString(dev);
+      if (route) return route; // route as the headline
+    } else {
+      const mfr = this._shortManufacturer(dev.manufacturer);
+      if (mfr) return mfr; // manufacturer name as the headline
+    }
+    return this._shortName(dev);
+  }
+
+  _flightRouteString(dev) {
+    if (this._routeLabel === "off" || !dev.departure || !dev.arrival) return null;
+    if (this._routeLabel === "cities" && dev.departure_city && dev.arrival_city)
+      return `${dev.departure_city}→${dev.arrival_city}`;
+    return `${dev.departure}→${dev.arrival}`;
   }
 
   _shortManufacturer(m) {

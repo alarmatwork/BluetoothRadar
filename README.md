@@ -252,8 +252,8 @@ Register the card's JS file **once** — this single resource provides *both* th
    # size: 600             # max scope width in px (default: fills the column)
    # max_distance: 100     # outer ring in km (defaults to integration range)
    # sweep_seconds: 4
-   # show_labels: true     # callsign + route + altitude + distance
-   # route_label: codes    # on-scope route: codes (LHR→JFK) | cities | off
+   # show_labels: true     # route + callsign + altitude + distance
+   # route_label: cities   # on-scope headline: cities (default) | codes | off
    # name_filter: "RYR"    # e.g. only Ryanair callsigns
    ```
 
@@ -291,9 +291,11 @@ Click any blip to open a details panel (click empty space to close):
 - **Flights:** callsign, ICAO24 hex, country, altitude, speed, heading, vertical
   rate, squawk, distance, bearing and position, plus the **route (departure →
   arrival)** and **aircraft registration/type/operator** looked up from the free
-  [adsbdb.com](https://www.adsbdb.com) API (works with either data source). The
-  **departure→arrival** is also drawn under the callsign on the scope for nearby
-  aircraft. Route lookups are best-effort and cached; the panel always includes
+  [adsbdb.com](https://www.adsbdb.com) API (works with either data source). On
+  the scope the **route is the headline** (city names by default, e.g.
+  `London→New York`) with the **callsign on the line below**; set
+  `route_label: codes` for `LHR→JFK`, or `off` to keep the callsign as the
+  headline. Route lookups are best-effort and cached; the panel always includes
   **ADS-B Exchange** and **FlightRadar24** links as a fallback.
 - **Bluetooth:** name, address (+ public/random type), RSSI, estimated
   distance, manufacturer, company IDs, TX power, connectable, **closest proxy +
