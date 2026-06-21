@@ -258,6 +258,26 @@ within a few seconds. The header shows a live count.
 > `type: custom:bluetooth-radar-card` with `mode: flights` (or vice-versa) — the
 > `mode:` option wins.
 
+#### Making the radar bigger
+
+The scope is **responsive** — by default it fills the width of its dashboard
+column and stays a square (it redraws at full resolution, so it's crisp at any
+size). Two ways to enlarge it:
+
+- **`size` option** — cap/centre the scope at a fixed pixel width:
+
+  ```yaml
+  type: custom:flight-radar-card
+  size: 600     # scope is at most 600px wide, centred in the card
+  ```
+
+  `size` only *caps* the width — in a narrow column the column is still the
+  real limit, so combine it with a wider layout for large displays.
+
+- **Panel view** (biggest, no `size` needed) — edit the dashboard, open the
+  view's ⚙️ settings, set **View type: Panel**. A panel view gives the single
+  card the full screen width, so the radar fills it.
+
 **Quick troubleshooting:**
 
 | Symptom | Likely cause / fix |
