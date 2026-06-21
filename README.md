@@ -229,6 +229,7 @@ Register the card's JS file **once** — this single resource provides *both* th
    type: custom:bluetooth-radar-card
    title: Bluetooth Radar
    # optional overrides:
+   # size: 600             # max scope width in px (default: fills the column)
    # max_distance: 15      # outer ring in metres (defaults to integration setting)
    # sweep_seconds: 4      # seconds per full sweep revolution
    # show_labels: true     # name + distance next to each blip
@@ -241,6 +242,7 @@ Register the card's JS file **once** — this single resource provides *both* th
    type: custom:flight-radar-card
    title: Flight Radar
    # optional overrides:
+   # size: 600             # max scope width in px (default: fills the column)
    # max_distance: 100     # outer ring in km (defaults to integration range)
    # sweep_seconds: 4
    # show_labels: true     # callsign + altitude + distance

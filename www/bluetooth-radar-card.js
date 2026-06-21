@@ -63,6 +63,7 @@ class RadarCard extends HTMLElement {
     this._mode = this._config.mode || this.constructor.RADAR_MODE;
     if (!SUBSCRIBE_TYPE[this._mode]) this._mode = "bluetooth";
     this._maxDistance = Number(this._config.max_distance) || null;
+    this._size = Number(this._config.size) || null; // px; caps + centres the scope
     this._sweepSeconds = Number(this._config.sweep_seconds) || 4;
     this._showLabels = this._config.show_labels !== false;
     this._nameFilter = (this._config.name_filter || "").toLowerCase();
@@ -399,7 +400,13 @@ class RadarCard extends HTMLElement {
         }
         .header .title { font-size: 15px; text-transform: uppercase; }
         .header .status { font-size: 11px; opacity: 0.8; }
-        .scope { position: relative; width: 100%; aspect-ratio: 1 / 1; }
+        .scope {
+          position: relative;
+          width: 100%;
+          aspect-ratio: 1 / 1;
+          ${this._size ? `max-width: ${this._size}px;` : ""}
+          margin: 0 auto;
+        }
         canvas {
           width: 100%;
           height: 100%;
