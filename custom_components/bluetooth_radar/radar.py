@@ -22,6 +22,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_track_time_interval
 
+from . import ble_parse
 from .const import (
     CONF_MAX_DISTANCE,
     CONF_MEASURED_POWER,
@@ -45,17 +46,16 @@ def _stable_angle(address: str) -> float:
     return (h % 3600) / 10.0
 
 
-def _manufacturer(service_info: bluetooth.BluetoothServiceInfoBleak) -> str | None:
+def _manufacturer(
+    service_info: bluetooth.BluetoothServiceInfoBleak,
+    manufacturer_data: dict[int, bytes],
+) -> str | None:
     """Best-effort vendor name from the advertisement."""
-    # Newer HA exposes a resolved name; fall back to the company id.
+    # Newer HA may expose a resolved name; otherwise map the company id.
     name = getattr(service_info, "manufacturer", None)
     if name:
         return name
-    data = getattr(service_info, "manufacturer_data", None) or {}
-    if data:
-        company_id = next(iter(data))
-        return f"0x{company_id:04X}"
-    return None
+    return ble_parse.best_manufacturer(manufacturer_data)
 
 
 class BluetoothRadarManager:
@@ -116,6 +116,9 @@ class BluetoothRadarManager:
     @callback
     def _ingest(self, service_info: bluetooth.BluetoothServiceInfoBleak) -> None:
         address = service_info.address
+        manufacturer_data = getattr(service_info, "manufacturer_data", None) or {}
+        service_data = getattr(service_info, "service_data", None) or {}
+        service_uuids = list(service_info.service_uuids)
         self._devices[address] = {
             "address": address,
             "name": service_info.name or address,
@@ -123,9 +126,15 @@ class BluetoothRadarManager:
             "tx_power": service_info.tx_power,
             "distance": self._estimate_distance(service_info.rssi),
             "source": service_info.source,
-            "manufacturer": _manufacturer(service_info),
-            "service_uuids": list(service_info.service_uuids),
+            "manufacturer": _manufacturer(service_info, manufacturer_data),
+            "company_ids": ble_parse.company_ids(manufacturer_data),
+            "service_uuids": service_uuids,
+            "service_names": ble_parse.service_labels(service_uuids),
+            "service_data_uuids": list(service_data),
             "connectable": service_info.connectable,
+            "address_kind": ble_parse.address_kind(address),
+            "ibeacon": ble_parse.parse_ibeacon(manufacturer_data),
+            "eddystone_url": ble_parse.parse_eddystone_url(service_data),
             "last_seen": time.time(),
         }
 
@@ -147,6 +156,23 @@ class BluetoothRadarManager:
                 continue
             item = dict(device)
             item.pop("last_seen", None)
+            # Use ALL proxies that currently hear this device: distance comes
+            # from the strongest (nearest) proxy, and we report the full list.
+            proxies = self._proxies_for(address)
+            if proxies:
+                best_name, best_rssi = max(proxies, key=lambda p: p[1])
+                item["rssi"] = best_rssi
+                item["distance"] = self._estimate_distance(best_rssi)
+                item["source"] = best_name
+                item["proxy_count"] = len(proxies)
+                item["proxies"] = [
+                    {
+                        "name": name,
+                        "rssi": rssi,
+                        "distance": self._estimate_distance(rssi),
+                    }
+                    for name, rssi in sorted(proxies, key=lambda p: p[1], reverse=True)
+                ]
             item["age"] = round(age, 1)
             item["angle"] = _stable_angle(address)
             devices.append(item)
@@ -159,6 +185,30 @@ class BluetoothRadarManager:
             },
             "devices": devices,
         }
+
+    @callback
+    def _proxies_for(self, address: str) -> list[tuple[str, int]]:
+        """All proxies currently hearing this address, with their RSSI."""
+        result: list[tuple[str, int]] = []
+        try:
+            scanner_devices = bluetooth.async_scanner_devices_by_address(
+                self.hass, address, connectable=False
+            )
+        except Exception:  # noqa: BLE001 - API shape varies across HA versions
+            return result
+        for sd in scanner_devices:
+            adv = getattr(sd, "advertisement", None)
+            rssi = getattr(adv, "rssi", None) if adv else None
+            if rssi is None:
+                continue
+            scanner = getattr(sd, "scanner", None)
+            name = (
+                getattr(scanner, "name", None)
+                or getattr(scanner, "source", None)
+                or "unknown"
+            )
+            result.append((name, rssi))
+        return result
 
     @callback
     def async_add_listener(

@@ -41,10 +41,15 @@ But **one receiver cannot measure direction.** So:
   device's MAC, so a device always sits in the same spot rather than jumping
   around. It does *not* mean the device is physically in that direction.
 
+**Multiple proxies** are used automatically: every Bluetooth proxy HA knows
+about feeds the radar, and for each device the **strongest (nearest) proxy's
+signal** sets the distance. Click a blip to see all the proxies that hear it and
+their individual RSSI.
+
 RSSI distance is noisy by nature (walls, orientation, reflections). Treat the
 rings as "near / medium / far," not a tape measure. For true multi-proxy
-positioning, see [Bermuda-style trilateration](https://github.com/agittins/bermuda)
-— this is the playful single-receiver cousin.
+*positioning* (trilateration), see [Bermuda](https://github.com/agittins/bermuda)
+— this radar uses the proxies for best-signal distance, not triangulation.
 
 ### ✈️ Flight mode (distance *and* bearing real)
 
@@ -288,8 +293,12 @@ Click any blip to open a details panel (click empty space to close):
   is best-effort and often unavailable, so the panel always includes
   **ADS-B Exchange** and **FlightRadar24** links where you can see the full
   route. (Route lookup needs the OpenSky source; local ADS-B has no route data.)
-- **Bluetooth:** name, address, RSSI, estimated distance, manufacturer, TX
-  power, which proxy heard it, service count and last-seen age.
+- **Bluetooth:** name, address (+ public/random type), RSSI, estimated
+  distance, manufacturer, company IDs, TX power, connectable, **closest proxy +
+  how many proxies heard it (and each one's RSSI)**, advertised service UUIDs
+  (with friendly names for known ones), service-data UUIDs, decoded **iBeacon**
+  (UUID/major/minor/power) and **Eddystone URL** when present, and last-seen age.
+  The manufacturer (when known) is also shown under the name on the scope.
 
 > Note on source/destination airports: the live OpenSky feed only carries
 > position/altitude/speed/heading — **not** route. That's why dep→arr is

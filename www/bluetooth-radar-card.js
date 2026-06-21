@@ -356,11 +356,13 @@ class RadarCard extends HTMLElement {
         ctx.fillStyle = `rgba(${green}, ${b})`;
         ctx.font = `${11 * dpr}px monospace`;
         ctx.fillText(this._shortName(blip.dev), bx + 7 * dpr, by - 4 * dpr);
-        const sub = this._subLabel(blip.dev, unit);
-        if (sub) {
-          ctx.fillStyle = `rgba(${green}, ${0.6 * b})`;
-          ctx.font = `${9 * dpr}px monospace`;
-          ctx.fillText(sub, bx + 7 * dpr, by + 8 * dpr);
+        const subs = this._subLabels(blip.dev, unit);
+        ctx.fillStyle = `rgba(${green}, ${0.6 * b})`;
+        ctx.font = `${9 * dpr}px monospace`;
+        let yy = by + 8 * dpr;
+        for (const line of subs) {
+          ctx.fillText(line, bx + 7 * dpr, yy);
+          yy += 10 * dpr;
         }
       }
     }
@@ -384,11 +386,25 @@ class RadarCard extends HTMLElement {
     ctx.fill();
   }
 
-  _subLabel(dev, unit) {
-    const parts = [];
-    if (dev.altitude != null) parts.push(`${dev.altitude}ft`);
-    if (dev.distance != null) parts.push(`${dev.distance}${unit}`);
-    return parts.join("  ");
+  _subLabels(dev, unit) {
+    if (this._mode === "flights") {
+      const parts = [];
+      if (dev.altitude != null) parts.push(`${dev.altitude}ft`);
+      if (dev.distance != null) parts.push(`${dev.distance}${unit}`);
+      return parts.length ? [parts.join("  ")] : [];
+    }
+    // Bluetooth: manufacturer under the name/MAC, then distance.
+    const lines = [];
+    const mfr = this._shortManufacturer(dev.manufacturer);
+    if (mfr) lines.push(mfr);
+    if (dev.distance != null) lines.push(`${dev.distance}${unit}`);
+    return lines;
+  }
+
+  _shortManufacturer(m) {
+    if (!m) return null;
+    // Strip the trailing "(0x004C)" so the scope label stays compact.
+    return m.replace(/\s*\(0x[0-9A-Fa-f]+\)\s*$/, "");
   }
 
   _shortName(dev) {
@@ -462,13 +478,41 @@ class RadarCard extends HTMLElement {
     } else {
       add("Name", dev.name);
       add("Address", dev.address);
+      add("Addr type", dev.address_kind);
       add("RSSI", dev.rssi != null ? `${dev.rssi} dBm` : null);
       add("Distance", dev.distance != null ? `${dev.distance} ${unit}` : null);
       add("Manufacturer", dev.manufacturer);
+      if (Array.isArray(dev.company_ids) && dev.company_ids.length)
+        add("Company IDs", dev.company_ids.join(", "));
       add("TX power", dev.tx_power != null ? `${dev.tx_power} dBm` : null);
-      add("Heard by", dev.source);
-      if (Array.isArray(dev.service_uuids) && dev.service_uuids.length)
-        add("Services", dev.service_uuids.length);
+      add(
+        "Connectable",
+        dev.connectable === true ? "yes" : dev.connectable === false ? "no" : null
+      );
+      add("Closest proxy", dev.source);
+      if (dev.proxy_count)
+        add(
+          "Heard by",
+          `${dev.proxy_count} prox${dev.proxy_count === 1 ? "y" : "ies"}`
+        );
+      if (Array.isArray(dev.proxies) && dev.proxies.length > 1)
+        add(
+          "All proxies",
+          dev.proxies.map((p) => `${p.name} ${p.rssi}dBm`).join(", ")
+        );
+      const svc =
+        dev.service_names && dev.service_names.length
+          ? dev.service_names
+          : dev.service_uuids;
+      if (Array.isArray(svc) && svc.length) add("Services", svc.join(", "));
+      if (Array.isArray(dev.service_data_uuids) && dev.service_data_uuids.length)
+        add("Service data", dev.service_data_uuids.join(", "));
+      if (dev.ibeacon) {
+        add("iBeacon UUID", dev.ibeacon.uuid);
+        add("iBeacon", `major ${dev.ibeacon.major} / minor ${dev.ibeacon.minor}`);
+        add("Beacon power", `${dev.ibeacon.power} dBm @1m`);
+      }
+      add("Eddystone URL", dev.eddystone_url);
       add("Last seen", dev.age != null ? `${dev.age}s ago` : null);
     }
     return rows;
