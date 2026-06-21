@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Bluetooth Radar",
+        "description": "Plots BLE devices heard by your Bluetooth proxies on a retro radar screen. Distance is estimated from RSSI; tune the values below for your environment.",
+        "data": {
+          "measured_power": "Measured power (RSSI at 1 m, dBm)",
+          "path_loss_exponent": "Path-loss exponent (2 = open space, 3-4 = walls)",
+          "max_distance": "Radar outer range (metres)",
+          "stale_seconds": "Drop devices not seen for (seconds)"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Bluetooth Radar is already set up."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Bluetooth Radar options",
+        "data": {
+          "measured_power": "Measured power (RSSI at 1 m, dBm)",
+          "path_loss_exponent": "Path-loss exponent (2 = open space, 3-4 = walls)",
+          "max_distance": "Radar outer range (metres)",
+          "stale_seconds": "Drop devices not seen for (seconds)"
+        }
+      }
+    }
+  }
+}
